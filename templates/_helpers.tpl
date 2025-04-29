@@ -162,11 +162,8 @@
   - name: JAVA_TOOL_OPTIONS
 {{- if .Values.proxy.enabled }}
     value: "{{ template "renderJavaOpts" .Values.resources.limits.memory }} -Dhttps.proxyHost={{ .Values.proxy.proxyHost }} -Dhttp.proxyHost={{ .Values.proxy.proxyHost }} -Dhttps.proxyPort={{ .Values.proxy.proxyPort }} -Dhttp.proxyPort={{ .Values.proxy.proxyPort }} -Dspring.mail.properties.mail.smtp.proxy.host={{ .Values.proxy.proxyHost }} -Dspring.mail.properties.mail.smtp.proxy.port={{ .Values.proxy.proxyPort }} -Dhttps.nonProxyHosts={{ .Values.proxy.nonProxy }} -Dhttp.nonProxyHosts={{ .Values.proxy.nonProxy }} -Djavax.net.ssl.trustStore=/etc/pki/ca-trust/extracted/java/cacerts -Djavax.net.ssl.trustStorePassword=changeit"
-{{- else if .Values.certificates.configmapName }}
-    value: "{{ template "renderJavaOpts" .Values.resources.limits.memory }} -Djavax.net.ssl.trustStore=/etc/pki/ca-trust/extracted/java/cacerts -Djavax.net.ssl.trustStorePassword=changeit"
 {{- else }}
-    value: "{{ template "renderJavaOpts" .Values.resources.limits.memory }}"
-{{- end }}
+    value: {{ template "renderJavaOpts" .Values.resources.limits.memory }}
 {{- if .Values.proxy.enabled }}
   - name: http_proxy
     value: "http://{{ .Values.proxy.proxyHost }}:{{ .Values.proxy.proxyPort }}"
@@ -186,10 +183,11 @@
     value: "{{ .Values.certificates.endpoints }}"
 {{- end }}
 {{- if .Values.certificates.staticCerts }}
-  - name: STATIC_CERTS
-    value: "{{ join "," .Values.certificates.staticCerts }}"
+   - name: STATIC_CERTS
+     value: "{{ join "," .Values.certificates.staticCerts }}"
 {{- end }}
 
+{{- end }}
 {{- end }}
 
 
@@ -347,9 +345,7 @@
 
 {{- define "renderDataBaseEnvs" }}
   - name: SPRING_DATASOURCE_URL
-{{- if .Values.datasources.patroni.enabled }}
-    value: "jdbc:postgresql://{{ join "," .Values.datasources.patroni.hosts }}/{{ .Values.datasources.mainDatasource.dbName }}?targetServerType={{ .Values.datasources.patroni.targetServerType }}"
-{{- else if or (eq .Values.datasources.mainDatasource.sslMode "require") (eq .Values.datasources.mainDatasource.sslMode "verify-ca") (eq .Values.datasources.mainDatasource.sslMode "verify-full") }}
+{{- if or (eq .Values.datasources.mainDatasource.sslMode "require") (eq .Values.datasources.mainDatasource.sslMode "verify-ca") (eq .Values.datasources.mainDatasource.sslMode "verify-full") }}
     value: "jdbc:postgresql://{{ template "mainDBHost" . }}:{{ template "mainDBPort" . }}/{{ template "mainDBName" . }}?sslmode={{ template "mainDBSSL" . }}&sslfactory=org.postgresql.ssl.DefaultJavaSSLFactory"
 {{- else }}
     value: "jdbc:postgresql://{{ template "mainDBHost" . }}:{{ template "mainDBPort" . }}/{{ template "mainDBName" . }}?sslmode={{ template "mainDBSSL" . }}"
@@ -368,26 +364,10 @@
       secretKeyRef:
         name: {{ template "testops.secret.name" . }}
         key: "testopsDbPass"
-  - name: SPRING_DATASOURCE_MIGRATION_USERNAME
-    valueFrom:
-      secretKeyRef:
-        name: {{ template "testops.secret.name" . }}
-        key: "testopsDbUser"
-  - name: SPRING_DATASOURCE_MIGRATION_PASSWORD
-    valueFrom:
-      secretKeyRef:
-        name: {{ template "testops.secret.name" . }}
-        key: "testopsDbPass"
   - name: SPRING_DATASOURCE_HIKARI_MAXIMUMPOOLSIZE
     value: "{{ .Values.datasources.mainDatasource.appMaxDBConnection }}"
   - name: SPRING_DATASOURCE_HIKARI_CONNECTIONTIMEOUT
     value: "{{ .Values.datasources.mainDatasource.appConnectionTimeout }}"
-  - name: SPRING_DATASOURCE_MIGRATION_HIKARI_MAXIMUM_POOL_SIZE
-    value: {{ .Values.datasources.migrationDatasource.maxDBMigrationConn | quote }}
-  - name: SPRING_DATASOURCE_MIGRATION_HIKARI_MINIMUM_IDLE
-    value: {{ .Values.datasources.migrationDatasource.minDBMigrationIdle | quote }}
-  - name: ALLURE_MIGRATION_TASK_SCHEDULER_POOL_SIZE
-    value: {{ .Values.datasources.migrationDatasource.migrationSchedulerPoolSize | quote }}
 
 {{- if .Values.datasources.uploaderDatasource.enabled }}
   - name: SPRING_DATASOURCE-UPLOADER_URL
@@ -413,27 +393,25 @@
 {{- end }}
 
 {{- if .Values.datasources.analyticsDatasource.enabled }}
-  - name: SPRING_DATASOURCEANALYTICS_URL
-{{- if .Values.datasources.patroni.enabled }}
-    value: "jdbc:postgresql://{{ join "," .Values.datasources.patroni.hosts }}/{{ .Values.datasources.analyticsDatasource.dbName }}?targetServerType={{ .Values.datasources.patroni.targetServerType }}"
-{{- else if or (eq .Values.datasources.analyticsDatasource.sslMode "require") (eq .Values.datasources.analyticsDatasource.sslMode "verify-ca") (eq .Values.datasources.analyticsDatasource.sslMode "verify-full") }}
+  - name: SPRING_DATASOURCE-ANALYTICS_URL
+{{- if or (eq .Values.datasources.analyticsDatasource.sslMode "require") (eq .Values.datasources.analyticsDatasource.sslMode "verify-ca") (eq .Values.datasources.analyticsDatasource.sslMode "verify-full") }}
     value: "jdbc:postgresql://{{ template "analyticsDBHost" . }}:{{ template "analyticsDBPort" . }}/{{ template "analyticsDBName" . }}?sslmode={{ template "analyticsDBSSL" . }}&sslfactory=org.postgresql.ssl.DefaultJavaSSLFactory&readOnly=true"
 {{- else }}
     value: "jdbc:postgresql://{{ template "analyticsDBHost" . }}:{{ template "analyticsDBPort" . }}/{{ template "analyticsDBName" . }}?sslmode={{ template "analyticsDBSSL" . }}&readOnly=true"
 {{- end }}
-  - name: SPRING_DATASOURCEANALYTICS_USERNAME
+  - name: SPRING_DATASOURCE-ANALYTICS_USERNAME
     valueFrom:
       secretKeyRef:
         name: {{ template "testops.secret.name" . }}
         key: "analyticsDbUser"
-  - name: SPRING_DATASOURCEANALYTICS_PASSWORD
+  - name: SPRING_DATASOURCE-ANALYTICS_PASSWORD
     valueFrom:
       secretKeyRef:
         name: {{ template "testops.secret.name" . }}
         key: "analyticsDbPass"
-  - name: SPRING_DATASOURCEANALYTICS_HIKARI_MAXIMUMPOOLSIZE
+  - name: SPRING_DATASOURCE-ANALYTICS_HIKARI_MAXIMUMPOOLSIZE
     value: "{{ .Values.datasources.analyticsDatasource.appMaxDBConnection }}"
-  - name: SPRING_DATASOURCEANALYTICS_HIKARI_CONNECTIONTIMEOUT
+  - name: SPRING_DATASOURCE-ANALYTICS_HIKARI_CONNECTIONTIMEOUT
     value: "{{ .Values.datasources.analyticsDatasource.appConnectionTimeout }}"
 {{- end }}
 
@@ -466,8 +444,6 @@
 {{- define "renderRedisEnvs" }}
   - name: SPRING_SESSION_STORE_TYPE
     value: "REDIS"
-  - name: ALLURE_REDIS_SESSIONTTL
-    value: {{ .Values.inactiveUserSessionDuration  }}
 {{- if .Values.redis.sentinel.enabled }}
   - name: SPRING_REDIS_SENTINEL_NODES
     value: "{{ .Values.redis.sentinel.nodes }}"
@@ -500,7 +476,7 @@
 
 {{- define "renderS3Envs" }}
   - name: ALLURE_BLOBSTORAGE_TYPE
-    value: {{ .Values.storage.type }}
+    value: S3
   - name: ALLURE_BLOBSTORAGE_MAXCONCURRENCY
     value: "{{ .Values.maxS3Concurrency }}"
 {{- if .Values.storage.s3.advancedS3SDK.enabled }}
@@ -544,14 +520,6 @@
       secretKeyRef:
         name: {{ template "testops.secret.name" . }}
         key: "s3SecretKey"
-{{- end }}
-{{- if .Values.storage.s3.serverSideEncryption.enabled }}
-  - name: ALLURE_BLOB_STORAGE_S3_SERVER_SIDE_ENCRYPTION
-    value: {{ .Values.storage.s3.serverSideEncryption.type | quote }}
-{{- if .Values.storage.s3.serverSideEncryption.keyId }}
-  - name: ALLURE_BLOB_STORAGE_S3_KMS_KEY_ID
-    value: {{ .Values.storage.s3.serverSideEncryption.keyId | quote }}
-{{- end }}
 {{- end }}
 {{- end }}
 
@@ -648,7 +616,7 @@
 {{- define "renderJavaOpts" }}
   {{- $v := . }}
   {{- $memString := include "calculateMemory" $v }}
-  {{- printf "-XX:AdaptiveSizePolicyWeight=50 -XX:+UseTLAB -XX:GCTimeRatio=15 -XX:MinHeapFreeRatio=40 -XX:MaxHeapFreeRatio=70 -XX:-PrintFlagsFinal %s" $memString }}
+  {{- printf "-XX:AdaptiveSizePolicyWeight=50 -XX:+UseTLAB -XX:GCTimeRatio=15 -XX:MinHeapFreeRatio=40 -XX:MaxHeapFreeRatio=70 -XX:-PrintFlagsFinal %s" $memString | quote }}
 {{- end }}
 
 {{- define "getImageRegistry" }}

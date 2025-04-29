@@ -6,7 +6,7 @@ metadata:
   name: {{ template "testops.fullname" . }}
 {{- if .Values.network.openShiftRoute.annotations }}
   annotations:
-{{ toYaml .Values.network.openShiftRoute.annotations | indent 4 }}
+{{ toYaml .Values.network.ingress.annotations | indent 4 }}
 {{- end }}
 spec:
   host: {{ .Values.instanceFqdn }}

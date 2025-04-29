@@ -22,11 +22,6 @@ spec:
       labels:
         app: {{ template "testops.fullname" . }}
         version: v1
-{{- if .Values.labels.deployment }}
-{{- range $key, $value := .Values.labels.deployment }}
-        {{ $key }}: {{ $value | quote }}
-{{- end }}
-{{- end }}
 {{- if .Values.annotations.deployment }}
       annotations:
 {{- range $key, $value := .Values.annotations.deployment }}
@@ -37,14 +32,8 @@ spec:
 {{- if .Values.rbac.enabled }}
       serviceAccountName:  {{ .Values.rbac.serviceAccountName }}
 {{- end }}
-{{- if .Values.image.authRequired.enabled }}
       imagePullSecrets:
-{{- if .Values.image.authRequired.useExternalSecret }}
-        - name: {{ .Values.image.authRequired.externalSecretName }}
-{{- else }}
         - name: {{ .Values.image.authRequired.credsKubeSecretName }}
-{{- end }}
-{{- end }}
       tolerations:
 {{ toYaml .Values.tolerations | indent 8 }}
 {{- if .Values.affinity }}
@@ -62,32 +51,9 @@ spec:
           resources:
 {{ toYaml . | indent 12 }}
 {{- end }}
-{{- if .Values.containerSecurityContext.enabled }}
-          securityContext: {{- omit .Values.containerSecurityContext "enabled" | toYaml | nindent 12 }}
-{{- end }}
           command: [ 'sh', '-c',
             'until pg_isready -h {{ template "mainDBHost" . }} -p {{ template "mainDBPort" . }};
              do echo waiting for database; sleep 2; done;' ]
-{{- if .Values.certificates.configmapName }}
-        - name: certs-init
-          image: amazoncorretto:17
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command:
-            - /bin/sh
-            - -c
-            - |
-              mkdir -p /etc/pki/ca-trust/extracted/{java,pem,openssl,edk2} &&
-              update-ca-trust &&
-              keytool -alias trust-bundle.pem -import -keystore /etc/pki/ca-trust/extracted/java/cacerts -file /etc/pki/ca-trust/source/anchors/trust-bundle.pem -storepass changeit -noprompt
-          volumeMounts:
-            - name: ssl-path
-              mountPath: "/etc/pki/ca-trust/extracted"
-            - name: certs
-              mountPath: /etc/pki/ca-trust/source/anchors
-              readOnly: true
-          securityContext:
-            runAsUser: 0
-{{- end }}
       containers:
 {{- $secret_name := include "testops.secret.name" . }}
         - name: {{ template "testops.fullname" . }}
@@ -118,7 +84,7 @@ spec:
 {{- include "renderOPENIDEnvs" . | indent 10 }}
 {{- end }}
 
-{{- if or (eq .Values.storage.type "S3") (eq .Values.storage.type "S3_ASYNC") }}
+{{- if eq .Values.storage.type "S3" }}
 {{- include "renderS3Envs" . | indent 10 }}
 {{- end }}
 
@@ -139,19 +105,14 @@ spec:
               value: {{ $value | quote }}
 {{- end }}
 {{- if .Values.probes.enabled }}
-          startupProbe:
-            httpGet:
-              path: /api/management/health/readiness
-              port: http
-{{ toYaml .Values.probes.startup.probe | indent 12 }}
           livenessProbe:
             httpGet:
-              path: /api/management/health/liveness
+              path: /api/management/health
               port: http
 {{ toYaml .Values.probes.liveness.probe | indent 12 }}
           readinessProbe:
             httpGet:
-              path: /api/management/health/liveness
+              path: /api/management/health
               port: http
 {{ toYaml .Values.probes.readiness.probe | indent 12 }}
 {{- end }}
@@ -159,6 +120,7 @@ spec:
           resources:
 {{ toYaml . | indent 12 }}
 {{- end }}
+{{- if or (eq .Values.storage.type "CSI") (.Values.vault.enabled) }}
           volumeMounts:
 {{- if eq .Values.storage.type "CSI" }}
             - mountPath: {{ .Values.storage.csi.mountPoint }}
@@ -168,10 +130,6 @@ spec:
             - name: vault-creds
               mountPath: "{{ .Values.vault.mountPath }}"
               readOnly: true
-{{- end }}
-{{- if .Values.certificates.configmapName }}
-            - name: ssl-path
-              mountPath: "/etc/pki/ca-trust/extracted"
 {{- end }}
       volumes:
 {{- if eq .Values.storage.type "CSI" }}
@@ -187,10 +145,4 @@ spec:
             volumeAttributes:
               secretProviderClass: {{ template "testops.fullname" . }}
 {{- end }}
-{{- if .Values.certificates.configmapName }}
-        - name: certs
-          configMap:
-            name: {{ .Values.certificates.configmapName }}
-        - name: ssl-path
-          emptyDir: {}
 {{- end }}

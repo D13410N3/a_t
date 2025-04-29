@@ -3,10 +3,10 @@
 # This configuration MUST NOT BE USED FOR THE PRODUCTION if Postgresql and minio are deployed by this chart (enabled = true)
 # Instances deployed with DB and minio as enabled = true cannot be supported
 #
-# Database must be deployed separately as stand-alone server.
+# Database must be deployed seprately as stand-alone server.
 # Database must not be deployed in a container or a pod
 # Database storage disks must be SSDs only
-# S3 like minio must be deployed separately on a dedicated machine with SSDs as storage HW
+# S3 like minio must be deployed separately on a dedicated machine with SSDs as stotage HW
 ############################################################################################################
 
 # The version of this chart is not synchronized with the version of TestOps application
@@ -18,7 +18,7 @@
 # for version upgrades, select the desired version of the application and the most recent chart
 # minimal version of Testops supported by this chart is 5.3.3
 ############################################################################################################
-version: 25.2.1
+version: 5.10.2
 
 ############################################################################################################
 # Deploy related
@@ -47,8 +47,6 @@ image:
     username: username-received-from-sales
     password: password-received-from-sales
     credsKubeSecretName: testops-secret-name-here
-    useExternalSecret: false
-    externalSecretName: registry-creds-external
 
 ############################################################################################################
 # Deploy related
@@ -108,7 +106,7 @@ timeZone: "Europe/London"
 
 ############################################################################################################
 # Email address of the very first user of TestOps instance to send the invitation.
-# This is in fact the first admin of the system that will invite other users.
+# This is in fact the first admin of the system, that will invite other users.
 # Make sure SMTP parameters are set to send the invite.
 # SMTP server settings are mandatory for the creation of first user.
 ############################################################################################################
@@ -117,7 +115,7 @@ email: you@company.com
 ############################################################################################################
 # cryptoPass parameter is used to encrypt sensitive data (passwords, API tokens in the database)
 # Come up with some phrase, then use Base64 encoding, and paste encoded value here.
-# In this example, we use the phrase "This phrase must be kept in a dark dry place." and encoded it as Base64
+# In this example we user phrase "This phrase must be kept in a dark dry place." and encoded it as Base64
 # phrase mustn't be changed over time, otherwise your integrations would stop working, and you will need to re-submit data
 ############################################################################################################
 cryptoPass: VGhpcyBwaHJhc2UgbXVzdCBiZSBrZXB0IGluIGEgZGFyayBkcnkgcGxhY2Uu
@@ -136,8 +134,6 @@ jwtSecret: L0weiVaXojihdwh+Dgx1GQ==
 # if longer validity of a token is required, update the value with the new one, use seconds
 ############################################################################################################
 bearerTokenExpirationAfter: 57600
-
-inactiveUserSessionDuration: 10d
 
 ############################################################################################################
 # Annotation configuration block
@@ -158,26 +154,19 @@ annotations:
     # custom.annotation/example: "some-value"
 
 ############################################################################################################
-# Labels configuration block
-# This section defines labels for enhancing the deployment and resource identification.
-############################################################################################################
-labels:
-  deployment: {}
-  # Example of custom labels that can be added:
-  # environment: "production"
-  # app_version: "1.0.0"
-  # team: "testops"
-
-############################################################################################################
 # certificates section defines the list of endpoints using self-signed certificates
 # endpoints using self-signed certificates must be added to this section with ports as comma separated list
 # example: <>
 # endpoints: ldaps.example.com:636,rabbit.example.com:5672
+# if you have a file with static certificates, these need to be added as links to files
+# example
+# staticCerts:
+#  - https://example.url/ca.pem
 ############################################################################################################
 certificates:
-  # In case you use self-signed certificates, make a configmap with list of certificates
-  configmapName:
   endpoints:
+  # List of endpoints with self-signed certificates
+  staticCerts: []
 
 ############################################################################################################
 # env section allows passing extra environment variables to the service in case you require something specific
@@ -233,12 +222,12 @@ databaseInit:
 # the historical information by dashboards (widgets)
 ############################################################################################################
 datasources:
+
 ############################################################################################################
 # mainDatasource defines parameters for connecting to the database in Read/ Write mode for the upload process
 # App related
 ############################################################################################################
   mainDatasource:
-    # If Patroni is enabled, this setting will be ignored, and the hosts from the Patroni configuration will be used instead.
     dbHost: db.example.com
     dbPort: 5432
     dbName: testops
@@ -278,7 +267,6 @@ datasources:
 ############################################################################################################
   analyticsDatasource:
     enabled: false
-    # If Patroni is enabled, this setting will be ignored, and the hosts from the Patroni configuration will be used instead.
     dbHost: db.example-ro.com
     dbPort: 5432
     dbName: testops
@@ -287,35 +275,6 @@ datasources:
     appMaxDBConnection: 5
     appConnectionTimeout: 60000
     sslMode: prefer
-############################################################################################################
-# App related
-# migrationDatasource defines the pool of DB connections and set of parameters for performing the data
-# migration tasks inside the database
-# A separate connection pool is required to exclude the influence of migration tasks on the work of users in
-# the UI and loading of autotest results
-# maxDBMigrationConn defines max number of connections for the migration tasks
-# minDBMigrationIdle defines the min number of connections system must keep alive even in idle state,
-#   please keep default unless you have explicit recommendation from the support
-# migrationSchedulerPoolSize defines the number of threads for the migration tasks, please keep default
-#   please keep default unless you have explicit recommendation from the support
-############################################################################################################
-  migrationDatasource:
-    maxDBMigrationConn: 2
-    minDBMigrationIdle: 0
-    migrationSchedulerPoolSize: 1
-############################################################################################################
-# Patroni configuration for high availability PostgreSQL setup.
-# If enabled, the application will use a list of Patroni-managed database hosts instead of a single host.
-# - enabled: Enables or disables Patroni integration.
-# - hosts: List of database nodes managed by Patroni, typically including multiple replicas.
-# - targetServerType: Defines the type of database node to connect to (e.g., 'master' for write operations, 'replica' for read-only access).
-############################################################################################################
-  patroni:
-    enabled: false
-    hosts:
-      - testops-db1:5432
-      - testops-db2:5432
-    targetServerType: master
 
 ############################################################################################################
 #  Proxy Configuration
@@ -359,30 +318,20 @@ smtp:
 ############################################################################################################
 # App related
 # storage section defines the configuration for the app to work with an Artifacts storage solution
-# 3 types of storage are supported:
-# 1) 'S3' - something supporting AWS S3 SDK like minio, ceph;
-# 2) S3_ASYNC - recommended for AWS S3, this option supports parameters described in .Values.storage.s3.advancedS3SDK
-# S3_ASYNC allows usage of optimised commands towards S3 solution (e.g. delete objects). Consult your solution
-# documentation before using this option
-# 3) CSI
+# 2 types of storage are supported: 1) S3, e.g. AWS S3 or something supporting AWS S3 SDK like minio, ceph; 2) CSI
 # For CSI refer to https://kubernetes-csi.github.io/docs/drivers.html
 # S3 is preferable. The best option is using SaaS S3 AWS or other S3 comparable services.
-# It's highly recommended disabling versioning for S3 from the very start
-# As last resort use minio included in this very chart, but remember, the physical storage must be SSD only.
+# it's highly recommended disabling versioning for S3 from the very start
+# As last resort use minio included into this very chart, but remember, the physical storage must be SSD only.
 # CSI (Local storage) is for advanced use. First, make sure you have ReadWriteMany CSI Driver Installed and SetUp
 ############################################################################################################
 storage:
-  # Options are:
-  # - S3
-  # - S3_ASYNC
-  # - CSI
   type: "S3"
   s3:
     ############################################################################################################
     # advancedS3SDK defines whether AWS S3 SDK ver 2 to support copy, move and DeleteObjects (many) operations
-    # AWS S3 supports these operations, minio supports these operations, for the rest S3 solutions please consult
-    # the used solution manuals. If your solution does not support one of the mentioned operations, please disable it below.
-    # advancedS3SDK is working only with storage.type = S3_ASYNC, if enabled with S3 or CSI, setting won't have any effect.
+    # AWS S3 supports these operations, minio supports these operrations, for the rest S3 solutions please consult
+    # the used solution manuals. If your solution does nos support one of the mentioned operations, please disable it below.
     ############################################################################################################
     advancedS3SDK:
       enabled: false
@@ -405,22 +354,6 @@ storage:
     # If you run Testops in AWS EKS you don't need stating accessKey & secretKey
     accessKey: WBuetMuTAMAB4M78NG3gQ4dCFJr3SSmU
     secretKey: m9F4qupW4ucKBDQBWr4rwQLSAeC6FE2L
-    ############################################################################################################
-    # AWS Server Side Encryption
-    # You can configure AWS SSE for S3 solutions that support it.
-    # This can be set to use SSE-KMS or DSSE-KMS for now.
-    # Ref: https://docs.aws.amazon.com/AmazonS3/latest/userguide/serv-side-encryption.html
-    ############################################################################################################
-    serverSideEncryption:
-      # Set this to 'true' to enable SSE encryption. If set to 'false', all other settings will be ignored.
-      enabled: false
-      # Specify the SSE-encryption type. Options are: 'AWS_KMS' or 'AWS_KMS_DSSE'.
-      type: AWS_KMS
-      # Specify the customer-managed key ID or full KMS-Key ARN.
-      # If not specified, AWS will use the default AWS-KMS-managed key.
-      # The ARN format is: arn:aws:kms:<region>:<account-id>:key/<key-id>
-      # Ref: https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingKMSEncryption.html#aws-managed-customer-managed-keys
-      keyId:
   csi:
     storageClass: ""
     existingVolumeName: ""
@@ -451,30 +384,24 @@ storage:
 probes:
   # Enable or disable probes
   enabled: true
-  # Startup probe configuration
-  startup:
-    # Define startup probe parameters
-    probe:
-      failureThreshold: 30
-      periodSeconds: 10
   # Liveness probe configuration
   liveness:
     # Define liveness probe parameters
     probe:
-      initialDelaySeconds: 0
-      periodSeconds: 30
-      timeoutSeconds: 1
+      periodSeconds: 40
+      timeoutSeconds: 2
       successThreshold: 1
-      failureThreshold: 10
+      failureThreshold: 3
+      initialDelaySeconds: 60
   # Readiness probe configuration
   readiness:
     # Define readiness probe parameters
     probe:
-      initialDelaySeconds: 0
-      periodSeconds: 10
-      timeoutSeconds: 1
+      periodSeconds: 20
+      timeoutSeconds: 2
       successThreshold: 1
-      failureThreshold: 30
+      failureThreshold: 3
+      initialDelaySeconds: 25
 
 ############################################################################################################
 # App related
@@ -485,7 +412,7 @@ probes:
 monitoring:
   enabled: false
   management:
-    # Endpoints to expose, e.g., for Prometheus, HealthChecks etc.
+    # Endpoints to expose, e.g. for Prometheus, HealthChecks etc.
     expose: health,info,prometheus,configprops
     cacheTTL: 20s
 
@@ -590,7 +517,7 @@ auth:
     uidAttribute: uid
     group:
       searchBase: ou=qa,ou=Security Groups,dc=example,dc=com
-      # in your LDAP this search string will be different
+      # in your LDAP this search string will be differnt
       searchFilter: (&(objectClass=Person)(uid={1}))
       roleAttribute: cn
     # Maps your LDAP groups on Groups
@@ -621,9 +548,9 @@ auth:
 # clientId - the ID of current TestOps instance as a client of OpenID provider. Name there, paste here. Do not use spaces here.
 # providerName - the name of the OpenID provider. Do not use dashes, underscores or spaces. One word like Keycloak will do.
 # clientSecret - if your OpenId has authentication enabled for TestOps, use here the secret generated for TestOps
-# redirectUri - URI to which OpenID provider is to resident the user after the authentication
-# redirectUri must contain the name of the provider, i.e. if providerName: keycloak, then
-# redirectUri is to look link https://<your-domain>/login/oauth2/code/keycloak
+# redirectUri - URI to which OpenID provider is to residert the user after the authentication
+# redirectUri must contain the name of the providerm, i.e. if providerName: keycloak, then
+# redirectUri is to look linke https://<your-domain>/login/oauth2/code/keycloak
 ############################################################################################################
     enabled: false
     clientName: testops
@@ -648,9 +575,9 @@ auth:
 # issuerUri: http://<open_id_provider_url>/issuer/something
     userinfoUri:
     issuerUri:
-# claim key with user name (first name), e.g., first_name
+# claim key with user name (first name), e.g. first_name
     firstNameAttribute:
-# claim key with user surname (last name), e.g., last_name
+# claim key with user surname (last name), e.g. last_name
     lastNameAttribute:
 
 ############################################################################################################
@@ -724,7 +651,7 @@ maxS3Concurrency: 200
 # Software required for Testops to work
 # - RabbitMQ - We recommend deploying as dedicated server.
 # - Redis - can be deployed using this chart
-# - PostgreSQL ver 15. Must be deployed as dedicated DB Server in a production system.
+# - PosgreSQL ver 15. Must be deployed as dedicated DB Server in a production system.
 # - minio (in case you have no AWS S3 or similar solution). We recommend deploying as dedicated server.
 ############################################################################################################
 
@@ -757,7 +684,7 @@ rabbitmq:
 ############################################################################################################
 # Redis stores users' sessions data. Mandatory to start Testops
 # Generally service does not require any persistence.
-# If deployed via this chart, Redis is managed by the original Helm chart provided by Bitnami
+# If deployed via this chart, Redis is managed by the oroginal Helm chart provided by Bitnami
 # Аor the reference, please visit: https://github.com/bitnami/charts/blob/main/bitnami/redis/README.md
 ############################################################################################################
 redis:
